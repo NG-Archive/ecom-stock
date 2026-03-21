@@ -29,6 +29,25 @@ public record StockHistory(
     LocalDateTime updatedAt
 
 ) {
+
+    public StockHistory {
+        if (changeQuantity == null || changeQuantity < 0) {
+            throw new IllegalArgumentException("stock.invalid.quantity");
+        }
+        if (totalQuantity == null || totalQuantity < 0) {
+            throw new IllegalArgumentException("stock.invalid.quantity");
+        }
+        if (stockId == null) {
+            throw new IllegalArgumentException("stock.invalid.stockid");
+        }
+        if (type == null) {
+            throw new IllegalArgumentException("stock.invalid.type");
+        }
+        if (orderId == null && type != ChangeType.IN) {
+            throw new IllegalArgumentException("stock.invalid.type");
+        }
+    }
+
     public static StockHistory create(Stock stock) {
         return new StockHistory(
             null,

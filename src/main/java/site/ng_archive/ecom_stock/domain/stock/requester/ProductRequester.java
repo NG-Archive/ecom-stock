@@ -21,9 +21,4 @@ public class ProductRequester {
             .onStatus(HttpStatusCode::isError, WebClientErrorHandler::handle)
             .bodyToMono(ProductResponse.class);
     }
-
-    public Mono<Boolean> exists(Long productId) {
-        return getProduct(productId)
-            .hasElement();
-    }
 }
