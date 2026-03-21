@@ -1,4 +1,4 @@
-package site.ng_archive.ecom_stock.domain.stock.client;
+package site.ng_archive.ecom_stock.domain.stock.requester;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatusCode;
@@ -10,7 +10,7 @@ import site.ng_archive.ecom_stock.domain.stock.dto.ProductResponse;
 
 @Component
 @RequiredArgsConstructor
-public class ProductClient {
+public class ProductRequester {
 
     private final WebClient productWebClient;
 
