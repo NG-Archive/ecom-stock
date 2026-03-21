@@ -41,4 +41,17 @@ public record StockHistory(
             null
         );
     }
+
+    public static StockHistory createDeduct(Stock stock, Long orderId, Long changeQuantity) {
+        return new StockHistory(
+            null,
+            stock.id(),
+            orderId,
+            ChangeType.OUT,
+            changeQuantity,
+            stock.quantity(),
+            null,
+            null
+        );
+    }
 }

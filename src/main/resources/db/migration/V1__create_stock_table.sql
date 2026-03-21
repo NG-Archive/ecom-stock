@@ -4,4 +4,4 @@ CREATE TABLE stock
     product_id BIGINT NOT NULL,
     quantity   BIGINT NOT NULL
 );
-CREATE INDEX idx_stock_product_id ON stock (product_id);
+CREATE UNIQUE INDEX idx_stock_product_id ON stock (product_id);
