@@ -3,9 +3,11 @@ package site.ng_archive.ecom_stock.domain.stock;
 import io.restassured.http.ContentType;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ContextConfiguration;
@@ -17,7 +19,6 @@ import site.ng_archive.ecom_stock.domain.stock.dto.CreateStockResponse;
 import site.ng_archive.ecom_stock.domain.stock.dto.DeductStockRequest;
 import site.ng_archive.ecom_stock.domain.stock.dto.ReadStockResponse;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -27,6 +28,7 @@ import static com.epages.restdocs.apispec.ResourceDocumentation.parameterWithNam
 import static io.restassured.module.webtestclient.RestAssuredWebTestClient.given;
 
 @Slf4j
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ContextConfiguration(classes = {EcomStockApplication.class})
 class StockControllerTest extends AcceptedTest {
 
@@ -39,14 +41,20 @@ class StockControllerTest extends AcceptedTest {
     @Autowired
     private StockHistoryRepository stockHistoryRepository;
 
-    @BeforeEach
-    void init() throws IOException {
+    @BeforeAll
+    void init() {
         stockTestTemplate.serverInit();
     }
 
-    @AfterEach
-    void destroy() throws IOException {
+    @AfterAll
+    void destroy()  {
         stockTestTemplate.serverDestroy();
+    }
+
+    @AfterEach
+    void afterEach() {
+        stockHistoryRepository.deleteAll().block();
+        stockRepository.deleteAll().block();
     }
 
     @Test
@@ -278,7 +286,6 @@ class StockControllerTest extends AcceptedTest {
 
         Stock stock = stockRepository.findByProductId(productId).block();
         List<StockHistory> histories = stockHistoryRepository.findByStockId(stock.id()).collectList().block();
-        log.info("histories: {}", histories);
         Assertions.assertThat(histories.size()).isEqualTo(threadCount+1);
         Assertions.assertThat(stock.quantity()).isEqualTo(0L);
     }

@@ -13,7 +13,6 @@ import site.ng_archive.ecom_stock.domain.stock.dto.DeductStockCommand;
 import site.ng_archive.ecom_stock.domain.stock.dto.ProductResponse;
 
 import java.io.IOException;
-import java.time.Duration;
 
 @Slf4j
 @EnableCommonTestFixtures
@@ -78,6 +77,4 @@ public class StockTestTemplate {
             throw new RuntimeException(e);
         }
     }
-
-
 }
