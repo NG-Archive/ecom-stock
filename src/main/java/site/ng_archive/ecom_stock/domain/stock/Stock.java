@@ -12,4 +12,10 @@ public record Stock(
 
     Long quantity
 ) {
+    public Stock deduct(Long quantity) {
+        if (quantity > this.quantity) {
+            throw new IllegalArgumentException("stock.invalid.quantity");
+        }
+        return new Stock(id, productId, this.quantity - quantity);
+    }
 }

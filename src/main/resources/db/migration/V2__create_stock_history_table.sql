@@ -9,3 +9,4 @@ CREATE TABLE stock_history
     created_at      DATETIME(6) NOT NULL,
     updated_at      DATETIME(6) NOT NULL
 );
+CREATE INDEX idx_stock_history_stock_id_created_at ON stock_history (stock_id, created_at DESC);
