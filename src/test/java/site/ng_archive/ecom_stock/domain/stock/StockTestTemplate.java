@@ -19,7 +19,7 @@ import java.io.IOException;
 @Component
 public class StockTestTemplate {
 
-
+    public static final int PRODUCT_SERVER_PORT = 8081;
     private final MockWebServer mockProductServer;
 
     @Autowired
@@ -37,7 +37,7 @@ public class StockTestTemplate {
 
     public void serverInit() {
         try {
-            mockProductServer.start(8081);
+            mockProductServer.start(PRODUCT_SERVER_PORT);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

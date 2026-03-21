@@ -12,8 +12,18 @@ public record Stock(
 
     Long quantity
 ) {
+    public Stock {
+        if (quantity == null || quantity < 0) {
+            throw new IllegalArgumentException("stock.invalid.quantity");
+        }
+
+        if (productId == null) {
+            throw new IllegalArgumentException("stock.invalid.productid");
+        }
+    }
+
     public Stock deduct(Long quantity) {
-        if (quantity > this.quantity) {
+        if (quantity == null || quantity < 0 || quantity > this.quantity) {
             throw new IllegalArgumentException("stock.invalid.quantity");
         }
         return new Stock(id, productId, this.quantity - quantity);

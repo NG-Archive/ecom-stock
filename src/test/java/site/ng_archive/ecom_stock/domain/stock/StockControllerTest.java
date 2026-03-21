@@ -88,6 +88,7 @@ class StockControllerTest extends AcceptedTest {
                 .extract().body().as(ReadStockResponse.class);
 
         Assertions.assertThat(response.productId()).isEqualTo(productId);
+        Assertions.assertThat(response.quantity()).isEqualTo(100L);
 
     }
 
@@ -174,6 +175,8 @@ class StockControllerTest extends AcceptedTest {
 
         Assertions.assertThat(response.errorCode()).isEqualTo("stock.invalid.productid");
         Assertions.assertThat(response.message()).isEqualTo("요청한 productId가 올바르지 않습니다.");
+        Stock stock = stockRepository.findByProductId(createStockRequest.productId()).block();
+        Assertions.assertThat(stock).isNull();
     }
 
     @Test
@@ -258,6 +261,11 @@ class StockControllerTest extends AcceptedTest {
 
         Assertions.assertThat(response.errorCode()).isEqualTo("stock.invalid.quantity");
         Assertions.assertThat(response.message()).isEqualTo("재고 보다 많이 차감할 수 없습니다.");
+
+        Stock reloaded = stockRepository.findByProductId(productId).block();
+        List<StockHistory> histories = stockHistoryRepository.findByStockId(stock.id()).collectList().block();
+        Assertions.assertThat(reloaded.quantity()).isEqualTo(10L);
+        Assertions.assertThat(histories).hasSize(1);
     }
 
     @Test
@@ -283,9 +291,12 @@ class StockControllerTest extends AcceptedTest {
         }
 
         latch.await();
+        executorService.shutdown();
 
         Stock stock = stockRepository.findByProductId(productId).block();
         List<StockHistory> histories = stockHistoryRepository.findByStockId(stock.id()).collectList().block();
+        log.info("stock: {}", stock);
+        log.info("histories: {}", histories);
         Assertions.assertThat(histories.size()).isEqualTo(threadCount+1);
         Assertions.assertThat(stock.quantity()).isEqualTo(0L);
     }

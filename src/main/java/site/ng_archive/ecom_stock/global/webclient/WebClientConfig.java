@@ -51,7 +51,7 @@ public class WebClientConfig {
         Integer evictTime,
         Integer timeout) {
 
-        // 1. Connection Pool 설정 (더 세밀하게 제어)
+        // 1. Connection Pool 설정
         ConnectionProvider provider = ConnectionProvider.builder(poolName)
             .maxConnections(poolSize)
             // 연결을 가져오기 위해 기다리는 시간
@@ -64,7 +64,7 @@ public class WebClientConfig {
             .evictInBackground(Duration.ofSeconds(evictTime))
             .build();
 
-        // 2. HttpClient 설정 (Connect & Read/Write Timeout)
+        // 2. HttpClient 설정
         HttpClient httpClient = HttpClient.create(provider)
             // 커넥션 타임아웃
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, Math.min(timeout * 1000, 3000))
