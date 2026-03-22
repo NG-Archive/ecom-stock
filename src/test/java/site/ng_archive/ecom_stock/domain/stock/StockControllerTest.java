@@ -14,6 +14,8 @@ import org.springframework.test.context.ContextConfiguration;
 import site.ng_archive.ecom_common.config.AcceptedTest;
 import site.ng_archive.ecom_common.error.ErrorResponse;
 import site.ng_archive.ecom_stock.EcomStockApplication;
+import site.ng_archive.ecom_stock.domain.stock.dto.AddStockRequest;
+import site.ng_archive.ecom_stock.domain.stock.dto.CancelStockRequest;
 import site.ng_archive.ecom_stock.domain.stock.dto.CreateStockRequest;
 import site.ng_archive.ecom_stock.domain.stock.dto.CreateStockResponse;
 import site.ng_archive.ecom_stock.domain.stock.dto.DeductStockRequest;
@@ -260,7 +262,7 @@ class StockControllerTest extends AcceptedTest {
             .extract().body().as(ErrorResponse.class);
 
         Assertions.assertThat(response.errorCode()).isEqualTo("stock.invalid.quantity");
-        Assertions.assertThat(response.message()).isEqualTo("재고 보다 많이 차감할 수 없습니다.");
+        Assertions.assertThat(response.message()).isEqualTo("수량 정보가 올바르지 않습니다.");
 
         Stock reloaded = stockRepository.findByProductId(productId).block();
         List<StockHistory> histories = stockHistoryRepository.findByStockId(stock.id()).collectList().block();
@@ -295,10 +297,215 @@ class StockControllerTest extends AcceptedTest {
 
         Stock stock = stockRepository.findByProductId(productId).block();
         List<StockHistory> histories = stockHistoryRepository.findByStockId(stock.id()).collectList().block();
-        log.info("stock: {}", stock);
-        log.info("histories: {}", histories);
         Assertions.assertThat(histories.size()).isEqualTo(threadCount+1);
         Assertions.assertThat(stock.quantity()).isEqualTo(0L);
+    }
+
+    @Test
+    void 재고추가() {
+
+        Long productId = 1L;
+        Long addQuantity = 50L;
+        Stock stock = stockTestTemplate.createStock(productId, 100L);
+        stockTestTemplate.createProductResponse(productId);
+        AddStockRequest request = new AddStockRequest(productId, addQuantity);
+
+        given()
+            .contentType(ContentType.JSON)
+            .pathParam("productId", productId)
+            .body(request)
+            .consumeWith(document(
+                info()
+                    .tag("Stock")
+                    .summary("재고 추가")
+                    .description("상품 ID를 사용하여 재고를 추가합니다.")
+                    .pathParameters(
+                        parameterWithName("productId").description("상품 아이디")
+                    )
+                    .requestFields(
+                        field(AddStockRequest.class, "productId", "상품 ID"),
+                        field(AddStockRequest.class, "quantity", "추가할 수량")
+                    )
+            ))
+            .patch("/{productId}/stock/add")
+            .then()
+            .status(HttpStatus.NO_CONTENT)
+            .log().all();
+
+        Stock updated = stockRepository.findByProductId(productId).block();
+        StockHistory history = stockHistoryRepository.findByStockId(stock.id())
+            .filter(h -> h.type() == ChangeType.IN && h.changeQuantity().equals(addQuantity))
+            .blockFirst();
+
+        Assertions.assertThat(updated.quantity()).isEqualTo(150L);
+        Assertions.assertThat(history.stockId()).isEqualTo(stock.id());
+        Assertions.assertThat(history.type()).isEqualTo(ChangeType.IN);
+        Assertions.assertThat(history.changeQuantity()).isEqualTo(addQuantity);
+        Assertions.assertThat(history.totalQuantity()).isEqualTo(150L);
+    }
+
+    @Test
+    void 재고추가_오류응답() {
+
+        Long invalidProductId = 1L;
+        Long addQuantity = 50L;
+        stockTestTemplate.createProductResponse(invalidProductId);
+        AddStockRequest request = new AddStockRequest(invalidProductId, addQuantity);
+
+        ErrorResponse response =
+            given()
+                .contentType(ContentType.JSON)
+                .pathParam("productId", invalidProductId)
+                .body(request)
+                .consumeWith(document(
+                    info()
+                        .tag("Stock")
+                        .summary("재고 추가")
+                        .description("상품 ID를 사용하여 재고를 추가합니다.")
+                        .pathParameters(
+                            parameterWithName("productId").description("상품 아이디")
+                        )
+                        .requestFields(
+                            field(AddStockRequest.class, "productId", "상품 ID"),
+                            field(AddStockRequest.class, "quantity", "추가할 수량")
+                        )
+                        .responseFields(
+                            field(ErrorResponse.class, "errorCode", "오류 코드"),
+                            field(ErrorResponse.class, "message", "오류 메시지")
+                        )
+                ))
+                .patch("/{productId}/stock/add")
+                .then()
+                .status(HttpStatus.NOT_FOUND)
+                .log().all()
+                .extract().body().as(ErrorResponse.class);
+
+        Assertions.assertThat(response.errorCode()).isEqualTo("stock.notfound");
+        Assertions.assertThat(response.message()).isEqualTo("재고 데이터가 존재하지 않습니다.");
+    }
+
+    @Test
+    void 재고추가_동시성테스트() throws InterruptedException {
+
+        long productId = 1L;
+        int threadCount = 10;
+        long addQuantity = 5L;
+
+        stockTestTemplate.createStock(productId, 0L);
+
+        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch latch = new CountDownLatch(threadCount);
+
+        for (int i = 0; i < threadCount; i++) {
+            executorService.submit(() -> {
+                try {
+                    stockTestTemplate.add(productId, addQuantity);
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        latch.await();
+        executorService.shutdown();
+
+        Stock stock = stockRepository.findByProductId(productId).block();
+        List<StockHistory> histories = stockHistoryRepository.findByStockId(stock.id()).collectList().block();
+        Assertions.assertThat(histories.size()).isEqualTo(threadCount + 1);
+        Assertions.assertThat(stock.quantity()).isEqualTo(50L);
+    }
+
+    @Test
+    void 재고취소() {
+
+        Long productId = 1L;
+        Long orderId = 1L;
+        Long deductQuantity = 30L;
+        Long cancelQuantity = 30L;
+        Stock stock = stockTestTemplate.createStock(productId, 100L);
+        stockTestTemplate.deduct(productId, orderId, deductQuantity);
+        stockTestTemplate.createProductResponse(productId);
+
+        CancelStockRequest request = new CancelStockRequest(productId, orderId);
+
+        given()
+            .contentType(ContentType.JSON)
+            .pathParam("productId", productId)
+            .body(request)
+            .consumeWith(document(
+                info()
+                    .tag("Stock")
+                    .summary("재고 취소")
+                    .description("주문 ID를 사용하여 차감된 재고를 취소하고 복구합니다.")
+                    .pathParameters(
+                        parameterWithName("productId").description("상품 아이디")
+                    )
+                    .requestFields(
+                        field(CancelStockRequest.class, "productId", "상품 ID"),
+                        field(CancelStockRequest.class, "orderId", "주문 ID")
+                    )
+            ))
+            .patch("/{productId}/stock/cancel")
+            .then()
+            .status(HttpStatus.NO_CONTENT)
+            .log().all();
+
+        Stock updated = stockRepository.findByProductId(productId).block();
+        StockHistory history = stockHistoryRepository.findByStockId(stock.id())
+            .filter(h -> h.type() == ChangeType.CANCEL && h.orderId() != null && h.orderId().equals(orderId))
+            .blockFirst();
+
+        Assertions.assertThat(updated.quantity()).isEqualTo(100L);
+        Assertions.assertThat(history.stockId()).isEqualTo(stock.id());
+        Assertions.assertThat(history.orderId()).isEqualTo(orderId);
+        Assertions.assertThat(history.type()).isEqualTo(ChangeType.CANCEL);
+        Assertions.assertThat(history.changeQuantity()).isEqualTo(cancelQuantity);
+        Assertions.assertThat(history.totalQuantity()).isEqualTo(100L);
+    }
+
+    @Test
+    void 재고취소_오류응답() {
+
+        Long productId = 1L;
+        Long invalidOrderId = 999L;
+        stockTestTemplate.createStock(productId, 100L);
+        stockTestTemplate.createProductResponse(productId);
+
+        CancelStockRequest request = new CancelStockRequest(productId, invalidOrderId);
+
+        ErrorResponse response =
+            given()
+                .contentType(ContentType.JSON)
+                .pathParam("productId", productId)
+                .body(request)
+                .consumeWith(document(
+                    info()
+                        .tag("Stock")
+                        .summary("재고 취소")
+                        .description("주문 ID를 사용하여 차감된 재고를 취소하고 복구합니다.")
+                        .pathParameters(
+                            parameterWithName("productId").description("상품 아이디")
+                        )
+                        .requestFields(
+                            field(CancelStockRequest.class, "productId", "상품 ID"),
+                            field(CancelStockRequest.class, "orderId", "주문 ID")
+                        )
+                        .responseFields(
+                            field(ErrorResponse.class, "errorCode", "오류 코드"),
+                            field(ErrorResponse.class, "message", "오류 메시지")
+                        )
+                ))
+                .patch("/{productId}/stock/cancel")
+                .then()
+                .status(HttpStatus.BAD_REQUEST)
+                .log().all()
+                .extract().body().as(ErrorResponse.class);
+
+        Assertions.assertThat(response.errorCode()).isEqualTo("stock.history.notfound");
+        Assertions.assertThat(response.message()).isEqualTo("재고 변동 내역을 찾을 수 없습니다.");
+
+        Stock stock = stockRepository.findByProductId(productId).block();
+        Assertions.assertThat(stock.quantity()).isEqualTo(100L);
     }
 
 

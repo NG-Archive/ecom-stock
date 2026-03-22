@@ -28,4 +28,18 @@ public record Stock(
         }
         return new Stock(id, productId, this.quantity - quantity);
     }
+
+    public Stock add(Long quantity) {
+        if (quantity == null || quantity < 0) {
+            throw new IllegalArgumentException("stock.invalid.quantity");
+        }
+        return new Stock(id, productId, this.quantity + quantity);
+    }
+
+    public Stock cancel(Long quantity) {
+        if (quantity == null || quantity <= 0) {
+            throw new IllegalArgumentException("stock.invalid.quantity");
+        }
+        return new Stock(id, productId, this.quantity + quantity);
+    }
 }
