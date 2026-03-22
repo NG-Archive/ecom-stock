@@ -6,11 +6,16 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuples;
 import site.ng_archive.ecom_common.handler.EntityNotFoundException;
-import site.ng_archive.ecom_stock.domain.stock.requester.ProductRequester;
+import site.ng_archive.ecom_stock.domain.stock.dto.AddStockCommand;
+import site.ng_archive.ecom_stock.domain.stock.dto.CancelStockCommand;
 import site.ng_archive.ecom_stock.domain.stock.dto.CreateStockCommand;
 import site.ng_archive.ecom_stock.domain.stock.dto.DeductStockCommand;
 import site.ng_archive.ecom_stock.domain.stock.dto.ProductResponse;
+import site.ng_archive.ecom_stock.domain.stock.requester.ProductRequester;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -52,5 +57,56 @@ public class StockService {
                 .save(StockHistory.createDeduct(deducted, command.orderId(), command.quantity()))
                 .thenReturn(deducted)
             );
+    }
+
+    @Transactional
+    public Mono<Stock> addStock(AddStockCommand command) {
+        return productRequester.getProduct(command.productId())
+            .switchIfEmpty(Mono.defer(() -> Mono.error(new EntityNotFoundException("product.notfound"))))
+            .flatMap(product -> stockRepository.findByProductIdForUpdate(command.productId()))
+            .switchIfEmpty(Mono.defer(() -> Mono.error(new EntityNotFoundException("stock.notfound"))))
+            .flatMap(stock -> stockRepository.save(stock.add(command.quantity())))
+            .flatMap(added -> stockHistoryRepository
+                .save(StockHistory.createAdded(added, command.quantity()))
+                .thenReturn(added)
+            );
+    }
+
+    @Transactional
+    public Mono<Stock> cancelStock(CancelStockCommand command) {
+        return productRequester.getProduct(command.productId())
+            .switchIfEmpty(Mono.defer(() -> Mono.error(new EntityNotFoundException("product.notfound"))))
+            .flatMap(product -> stockRepository.findByProductIdForUpdate(command.productId()))
+            .switchIfEmpty(Mono.defer(() -> Mono.error(new EntityNotFoundException("stock.notfound"))))
+            .zipWhen(stock -> stockHistoryRepository.findByStockIdAndOrderId(stock.id(), command.orderId())
+                    .collectList())
+            .flatMap(t -> {
+                Stock stock = t.getT1();
+                List<StockHistory> histories = t.getT2();
+                if(histories.isEmpty()) return Mono.error(new IllegalArgumentException("stock.history.notfound"));
+
+                Long outQuantitySum = getSumByType(histories, ChangeType.OUT);
+                Long cancelledQuantitySum = getSumByType(histories, ChangeType.CANCEL);
+                Long cancelQuantity = outQuantitySum - cancelledQuantitySum;
+                if(cancelQuantity <= 0) return Mono.error(new IllegalArgumentException("stock.history.notfound"));
+
+                return stockRepository.save(stock.cancel(cancelQuantity))
+                    .map(canceled -> Tuples.of(canceled, cancelQuantity));
+            })
+            .flatMap(t -> {
+                Stock canceled = t.getT1();
+                Long cancelQuantity = t.getT2();
+                return stockHistoryRepository
+                    .save(StockHistory.createCanceled(canceled, command.orderId(), cancelQuantity))
+                    .thenReturn(canceled);
+                }
+            );
+    }
+
+    private static long getSumByType(List<StockHistory> histories, ChangeType type) {
+        return histories.stream()
+            .filter(history -> history.type().equals(type))
+            .mapToLong(StockHistory::changeQuantity)
+            .sum();
     }
 }

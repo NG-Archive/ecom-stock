@@ -73,4 +73,30 @@ public record StockHistory(
             null
         );
     }
+
+    public static StockHistory createAdded(Stock stock, Long quantity) {
+        return new StockHistory(
+            null,
+            stock.id(),
+            null,
+            ChangeType.IN,
+            quantity,
+            stock.quantity(),
+            null,
+            null
+        );
+    }
+
+    public static StockHistory createCanceled(Stock stock, Long orderId, Long quantity) {
+        return new StockHistory(
+            null,
+            stock.id(),
+            orderId,
+            ChangeType.CANCEL,
+            quantity,
+            stock.quantity(),
+            null,
+            null
+        );
+    }
 }

@@ -8,6 +8,7 @@ import okhttp3.mockwebserver.MockWebServer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import site.ng_archive.ecom_common.config.EnableCommonTestFixtures;
+import site.ng_archive.ecom_stock.domain.stock.dto.AddStockCommand;
 import site.ng_archive.ecom_stock.domain.stock.dto.CreateStockCommand;
 import site.ng_archive.ecom_stock.domain.stock.dto.DeductStockCommand;
 import site.ng_archive.ecom_stock.domain.stock.dto.ProductResponse;
@@ -68,6 +69,12 @@ public class StockTestTemplate {
         createProductResponse(productId);
         DeductStockCommand deductStockCommand = new DeductStockCommand(productId, orderId, deductQuantity);
         return stockService.deductStock(deductStockCommand).block();
+    }
+
+    public Stock add(Long productId, Long addQuantity) {
+        createProductResponse(productId);
+        AddStockCommand addStockCommand = new AddStockCommand(productId, addQuantity);
+        return stockService.addStock(addStockCommand).block();
     }
 
     private String toJson(Object obj) {

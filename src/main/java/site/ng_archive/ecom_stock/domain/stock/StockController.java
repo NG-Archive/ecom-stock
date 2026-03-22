@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
+import site.ng_archive.ecom_stock.domain.stock.dto.AddStockRequest;
+import site.ng_archive.ecom_stock.domain.stock.dto.CancelStockRequest;
 import site.ng_archive.ecom_stock.domain.stock.dto.CreateStockRequest;
 import site.ng_archive.ecom_stock.domain.stock.dto.CreateStockResponse;
 import site.ng_archive.ecom_stock.domain.stock.dto.DeductStockRequest;
@@ -55,6 +57,32 @@ public class StockController {
         }
 
         return stockService.deductStock(request.toCommand()).then();
+    }
+
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PatchMapping("/{productId}/stock/add")
+    public Mono<Void> addStock(
+        @PathVariable Long productId,
+        @Valid @RequestBody AddStockRequest request
+    ) {
+        if (!productId.equals(request.productId())) {
+            return Mono.error(new IllegalArgumentException("stock.invalid.productid"));
+        }
+
+        return stockService.addStock(request.toCommand()).then();
+    }
+
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PatchMapping("/{productId}/stock/cancel")
+    public Mono<Void> cancelStock(
+        @PathVariable Long productId,
+        @Valid @RequestBody CancelStockRequest request
+    ) {
+        if (!productId.equals(request.productId())) {
+            return Mono.error(new IllegalArgumentException("stock.invalid.productid"));
+        }
+
+        return stockService.cancelStock(request.toCommand()).then();
     }
 
 
