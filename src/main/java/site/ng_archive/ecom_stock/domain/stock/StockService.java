@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuples;
+import site.ng_archive.ecom_common.auth.exception.ForbiddenException;
 import site.ng_archive.ecom_common.handler.EntityNotFoundException;
 import site.ng_archive.ecom_stock.domain.stock.dto.AddStockCommand;
 import site.ng_archive.ecom_stock.domain.stock.dto.CancelStockCommand;
@@ -29,7 +30,9 @@ public class StockService {
     @Transactional
     public Mono<Stock> createStock(CreateStockCommand command) {
         return productRequester.getProduct(command.productId())
-            .switchIfEmpty(Mono.defer(() -> Mono.error(new EntityNotFoundException("product.notfound"))))
+            .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("product.notfound")))
+            .filter(product -> command.memberId().equals(product.memberId()))
+            .switchIfEmpty(Mono.error(() -> new ForbiddenException("stock.forbidden")))
             .flatMap(product -> stockRepository.save(command.toEntity()))
             .onErrorMap(DuplicateKeyException.class, e -> new IllegalArgumentException("stock.already.exists"))
             .flatMap(stock -> stockHistoryRepository.save(StockHistory.create(stock))
@@ -62,9 +65,11 @@ public class StockService {
     @Transactional
     public Mono<Stock> addStock(AddStockCommand command) {
         return productRequester.getProduct(command.productId())
-            .switchIfEmpty(Mono.defer(() -> Mono.error(new EntityNotFoundException("product.notfound"))))
+            .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("product.notfound")))
+            .filter(product -> command.memberId().equals(product.memberId()))
+            .switchIfEmpty(Mono.error(() -> new ForbiddenException("stock.forbidden")))
             .flatMap(product -> stockRepository.findByProductIdForUpdate(command.productId()))
-            .switchIfEmpty(Mono.defer(() -> Mono.error(new EntityNotFoundException("stock.notfound"))))
+            .switchIfEmpty(Mono.error(() -> new EntityNotFoundException("stock.notfound")))
             .flatMap(stock -> stockRepository.save(stock.add(command.quantity())))
             .flatMap(added -> stockHistoryRepository
                 .save(StockHistory.createAdded(added, command.quantity()))
