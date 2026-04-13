@@ -11,6 +11,9 @@ import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ContextConfiguration;
+import site.ng_archive.ecom_common.auth.Role;
+import site.ng_archive.ecom_common.auth.UserContext;
+import site.ng_archive.ecom_common.auth.token.TokenUtil;
 import site.ng_archive.ecom_common.config.AcceptedTest;
 import site.ng_archive.ecom_common.error.ErrorResponse;
 import site.ng_archive.ecom_stock.EcomStockApplication;
@@ -63,8 +66,9 @@ class StockControllerTest extends AcceptedTest {
     void 재고단건조회() {
 
         Long productId = 1L;
-        stockTestTemplate.createStock(productId, 100L);
-        stockTestTemplate.createProductResponse(productId);
+        Long memberId = 10L;
+        stockTestTemplate.createStock(productId, 100L, memberId);
+        stockTestTemplate.createProductResponse(productId, memberId);
 
         ReadStockResponse response =
             given()
@@ -98,12 +102,15 @@ class StockControllerTest extends AcceptedTest {
     void 재고생성() {
 
         Long productId = 1L;
+        Long memberId = 10L;
         CreateStockRequest createStockRequest = new CreateStockRequest(productId, 100L);
-        stockTestTemplate.createProductResponse(productId);
+        stockTestTemplate.createProductResponse(productId, memberId);
+        String token = createTestJwtToken(memberId, Role.ROLES.SELLER);
 
         CreateStockResponse response =
             given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + token)
                 .pathParam("productId", productId)
                 .body(createStockRequest)
                 .consumeWith(document(
@@ -146,10 +153,13 @@ class StockControllerTest extends AcceptedTest {
 
         Long invalidProductId = 2L;
         CreateStockRequest createStockRequest = new CreateStockRequest(1L, 100L);
+        Long memberId = 10L;
+        String token = createTestJwtToken(memberId, Role.ROLES.SELLER);
 
         ErrorResponse response =
             given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + token)
                 .pathParam("productId", invalidProductId)
                 .body(createStockRequest)
                 .consumeWith(document(
@@ -182,13 +192,59 @@ class StockControllerTest extends AcceptedTest {
     }
 
     @Test
+    void 재고생성_소유자아님() {
+
+        Long productId = 1L;
+        Long memberId = 10L;
+        Long forbiddenMemberId = 20L;
+        CreateStockRequest createStockRequest = new CreateStockRequest(productId, 100L);
+        stockTestTemplate.createProductResponse(productId, forbiddenMemberId);
+        String token = createTestJwtToken(memberId, Role.ROLES.SELLER);
+
+        ErrorResponse response =
+            given()
+                .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + token)
+                .pathParam("productId", productId)
+                .body(createStockRequest)
+                .consumeWith(document(
+                    info()
+                        .tag("Stock")
+                        .summary("재고 생성")
+                        .description("상품 ID를 사용하여 재고를 생성합니다.")
+                        .pathParameters(
+                            parameterWithName("productId").description("상품 아이디")
+                        )
+                        .requestFields(
+                            field(CreateStockRequest.class, "productId", "상품 ID"),
+                            field(CreateStockRequest.class, "quantity", "재고 수량")
+                        )
+                        .responseFields(
+                            field(ErrorResponse.class, "errorCode", "오류 코드"),
+                            field(ErrorResponse.class, "message", "오류 메시지")
+                        )
+                ))
+                .post("/{productId}/stock")
+                .then()
+                .status(HttpStatus.FORBIDDEN)
+                .log().all()
+                .extract().body().as(ErrorResponse.class);
+
+        Assertions.assertThat(response.errorCode()).isEqualTo("stock.forbidden");
+        Assertions.assertThat(response.message()).isEqualTo("해당 상품에 대한 재고 관리 권한이 없습니다.");
+        Stock stock = stockRepository.findByProductId(createStockRequest.productId()).block();
+        Assertions.assertThat(stock).isNull();
+    }
+
+    @Test
     void 재고차감() {
 
         Long productId = 1L;
         Long orderId = 1L;
         Long deductQuantity = 30L;
-        Stock stock = stockTestTemplate.createStock(productId, 100L);
-        stockTestTemplate.createProductResponse(productId);
+        Long memberId = 10L;
+        Stock stock = stockTestTemplate.createStock(productId, 100L, memberId);
+        stockTestTemplate.createProductResponse(productId, memberId);
         DeductStockRequest request = new DeductStockRequest(productId, orderId, deductQuantity);
 
         given()
@@ -233,8 +289,9 @@ class StockControllerTest extends AcceptedTest {
         Long productId = 1L;
         Long orderId = 1L;
         Long deductQuantity = 11L;
-        Stock stock = stockTestTemplate.createStock(productId, 10L);
-        stockTestTemplate.createProductResponse(productId);
+        Long memberId = 10L;
+        Stock stock = stockTestTemplate.createStock(productId, 10L, memberId);
+        stockTestTemplate.createProductResponse(productId, memberId);
         DeductStockRequest request = new DeductStockRequest(productId, orderId, deductQuantity);
 
         ErrorResponse response =
@@ -275,8 +332,9 @@ class StockControllerTest extends AcceptedTest {
 
         long productId = 1L;
         int threadCount = 10;
+        Long memberId = 10L;
 
-        stockTestTemplate.createStock(productId, (long) threadCount);
+        stockTestTemplate.createStock(productId, (long) threadCount, memberId);
 
         ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
         CountDownLatch latch = new CountDownLatch(threadCount);
@@ -285,7 +343,7 @@ class StockControllerTest extends AcceptedTest {
             long orderId = i;
             executorService.submit(() -> {
                 try {
-                    stockTestTemplate.deduct(productId, orderId, 1L);
+                    stockTestTemplate.deduct(productId, orderId, 1L, memberId);
                 } finally {
                     latch.countDown();
                 }
@@ -306,12 +364,15 @@ class StockControllerTest extends AcceptedTest {
 
         Long productId = 1L;
         Long addQuantity = 50L;
-        Stock stock = stockTestTemplate.createStock(productId, 100L);
-        stockTestTemplate.createProductResponse(productId);
+        Long memberId = 10L;
+        Stock stock = stockTestTemplate.createStock(productId, 100L, memberId);
+        stockTestTemplate.createProductResponse(productId, memberId);
         AddStockRequest request = new AddStockRequest(productId, addQuantity);
+        String token = createTestJwtToken(memberId, Role.ROLES.SELLER);
 
         given()
             .contentType(ContentType.JSON)
+            .header("Authorization", "Bearer " + token)
             .pathParam("productId", productId)
             .body(request)
             .consumeWith(document(
@@ -349,12 +410,15 @@ class StockControllerTest extends AcceptedTest {
 
         Long invalidProductId = 1L;
         Long addQuantity = 50L;
-        stockTestTemplate.createProductResponse(invalidProductId);
+        Long memberId = 10L;
+        stockTestTemplate.createProductResponse(invalidProductId, memberId);
         AddStockRequest request = new AddStockRequest(invalidProductId, addQuantity);
+        String token = createTestJwtToken(memberId, Role.ROLES.SELLER);
 
         ErrorResponse response =
             given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + token)
                 .pathParam("productId", invalidProductId)
                 .body(request)
                 .consumeWith(document(
@@ -390,8 +454,9 @@ class StockControllerTest extends AcceptedTest {
         long productId = 1L;
         int threadCount = 10;
         long addQuantity = 5L;
+        Long memberId = 10L;
 
-        stockTestTemplate.createStock(productId, 0L);
+        stockTestTemplate.createStock(productId, 0L, memberId);
 
         ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
         CountDownLatch latch = new CountDownLatch(threadCount);
@@ -399,7 +464,7 @@ class StockControllerTest extends AcceptedTest {
         for (int i = 0; i < threadCount; i++) {
             executorService.submit(() -> {
                 try {
-                    stockTestTemplate.add(productId, addQuantity);
+                    stockTestTemplate.add(productId, addQuantity, memberId);
                 } finally {
                     latch.countDown();
                 }
@@ -416,15 +481,57 @@ class StockControllerTest extends AcceptedTest {
     }
 
     @Test
+    void 재고추가_소유자아님() {
+
+        Long productId = 1L;
+        Long addQuantity = 50L;
+        Long memberId = 10L;
+        Long forbiddenMemberId = 20L;
+        stockTestTemplate.createStock(productId, 100L, memberId);
+        stockTestTemplate.createProductResponse(productId, memberId);
+        AddStockRequest request = new AddStockRequest(productId, addQuantity);
+        String token = createTestJwtToken(forbiddenMemberId, Role.ROLES.SELLER);
+
+        ErrorResponse response = given()
+            .contentType(ContentType.JSON)
+            .header("Authorization", "Bearer " + token)
+            .pathParam("productId", productId)
+            .body(request)
+            .consumeWith(document(
+                info()
+                    .tag("Stock")
+                    .summary("재고 추가")
+                    .description("상품 ID를 사용하여 재고를 추가합니다.")
+                    .pathParameters(
+                        parameterWithName("productId").description("상품 아이디")
+                    )
+                    .responseFields(
+                        field(ErrorResponse.class, "errorCode", "오류 코드"),
+                        field(ErrorResponse.class, "message", "오류 메시지")
+                    )
+            ))
+            .patch("/{productId}/stock/add")
+            .then()
+            .status(HttpStatus.FORBIDDEN)
+            .log().all()
+            .extract().body().as(ErrorResponse.class);
+
+        Assertions.assertThat(response.errorCode()).isEqualTo("stock.forbidden");
+        Assertions.assertThat(response.message()).isEqualTo("해당 상품에 대한 재고 관리 권한이 없습니다.");
+    }
+
+    @Test
     void 재고취소() {
 
         Long productId = 1L;
         Long orderId = 1L;
         Long deductQuantity = 30L;
         Long cancelQuantity = 30L;
-        Stock stock = stockTestTemplate.createStock(productId, 100L);
-        stockTestTemplate.deduct(productId, orderId, deductQuantity);
-        stockTestTemplate.createProductResponse(productId);
+        Long memberId = 10L;
+
+        Stock stock = stockTestTemplate.createStock(productId, 100L, memberId);
+        stockTestTemplate.deduct(productId, orderId, deductQuantity, memberId);
+        stockTestTemplate.createProductResponse(productId, memberId);
 
         CancelStockRequest request = new CancelStockRequest(productId, orderId);
 
@@ -468,8 +575,10 @@ class StockControllerTest extends AcceptedTest {
 
         Long productId = 1L;
         Long invalidOrderId = 999L;
-        stockTestTemplate.createStock(productId, 100L);
-        stockTestTemplate.createProductResponse(productId);
+        Long memberId = 10L;
+
+        stockTestTemplate.createStock(productId, 100L, memberId);
+        stockTestTemplate.createProductResponse(productId, memberId);
 
         CancelStockRequest request = new CancelStockRequest(productId, invalidOrderId);
 
@@ -508,5 +617,8 @@ class StockControllerTest extends AcceptedTest {
         Assertions.assertThat(stock.quantity()).isEqualTo(100L);
     }
 
+    private String createTestJwtToken(Long memberId, String role) {
+        return TokenUtil.getSign(UserContext.of(memberId, role));
+    }
 
 }

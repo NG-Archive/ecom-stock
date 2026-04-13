@@ -53,27 +53,27 @@ public class StockTestTemplate {
         }
     }
 
-    public Stock createStock(Long productId, Long quantity) {
-        createProductResponse(productId);
-        CreateStockCommand createStockCommand = new CreateStockCommand(productId, quantity);
+    public Stock createStock(Long productId, Long quantity, Long memberId) {
+        createProductResponse(productId, memberId);
+        CreateStockCommand createStockCommand = new CreateStockCommand(productId, quantity, memberId);
         return stockService.createStock(createStockCommand).block();
     }
 
-    public void createProductResponse(Long productId) {
+    public void createProductResponse(Long productId, Long memberId) {
         mockProductServer.enqueue(new MockResponse()
             .addHeader("Content-Type", "application/json")
-            .setBody(toJson(new ProductResponse(productId, "상품명", 20000L))));
+            .setBody(toJson(new ProductResponse(productId, "상품명", 20000L, memberId))));
     }
 
-    public Stock deduct(Long productId, Long orderId, Long deductQuantity) {
-        createProductResponse(productId);
+    public Stock deduct(Long productId, Long orderId, Long deductQuantity, Long memberId) {
+        createProductResponse(productId, memberId);
         DeductStockCommand deductStockCommand = new DeductStockCommand(productId, orderId, deductQuantity);
         return stockService.deductStock(deductStockCommand).block();
     }
 
-    public Stock add(Long productId, Long addQuantity) {
-        createProductResponse(productId);
-        AddStockCommand addStockCommand = new AddStockCommand(productId, addQuantity);
+    public Stock add(Long productId, Long addQuantity, Long memberId) {
+        createProductResponse(productId, memberId);
+        AddStockCommand addStockCommand = new AddStockCommand(productId, addQuantity, memberId);
         return stockService.addStock(addStockCommand).block();
     }
 

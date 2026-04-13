@@ -12,6 +12,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
+import site.ng_archive.ecom_common.auth.Role;
+import site.ng_archive.ecom_common.auth.UserContext;
+import site.ng_archive.ecom_common.auth.aspect.LoginUser;
+import site.ng_archive.ecom_common.auth.aspect.RequireRoles;
 import site.ng_archive.ecom_stock.domain.stock.dto.AddStockRequest;
 import site.ng_archive.ecom_stock.domain.stock.dto.CancelStockRequest;
 import site.ng_archive.ecom_stock.domain.stock.dto.CreateStockRequest;
@@ -32,9 +36,11 @@ public class StockController {
             .map(ReadStockResponse::from);
     }
 
+    @RequireRoles
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/{productId}/stock")
     public Mono<CreateStockResponse> createStock(
+        @LoginUser UserContext user,
         @PathVariable Long productId,
         @Valid @RequestBody CreateStockRequest request
     ) {
@@ -42,7 +48,7 @@ public class StockController {
             return Mono.error(new IllegalArgumentException("stock.invalid.productid"));
         }
 
-        return stockService.createStock(request.toCommand())
+        return stockService.createStock(request.toCommand(user.id()))
             .map(CreateStockResponse::from);
     }
 
@@ -59,9 +65,11 @@ public class StockController {
         return stockService.deductStock(request.toCommand()).then();
     }
 
+    @RequireRoles
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PatchMapping("/{productId}/stock/add")
     public Mono<Void> addStock(
+        @LoginUser UserContext user,
         @PathVariable Long productId,
         @Valid @RequestBody AddStockRequest request
     ) {
@@ -69,7 +77,7 @@ public class StockController {
             return Mono.error(new IllegalArgumentException("stock.invalid.productid"));
         }
 
-        return stockService.addStock(request.toCommand()).then();
+        return stockService.addStock(request.toCommand(user.id())).then();
     }
 
     @ResponseStatus(HttpStatus.NO_CONTENT)
