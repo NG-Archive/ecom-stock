@@ -16,7 +16,7 @@ public class ProductRequester {
 
     public Mono<ProductResponse> getProduct(Long productId) {
         return productWebClient.get()
-            .uri("/product/{id}", productId)
+            .uri("/product/{id}/check", productId)
             .retrieve()
             .onStatus(HttpStatusCode::isError, WebClientErrorHandler::handle)
             .bodyToMono(ProductResponse.class);

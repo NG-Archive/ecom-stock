@@ -62,7 +62,7 @@ public class StockTestTemplate {
     public void createProductResponse(Long productId, Long memberId) {
         mockProductServer.enqueue(new MockResponse()
             .addHeader("Content-Type", "application/json")
-            .setBody(toJson(new ProductResponse(productId, "상품명", 20000L, memberId))));
+            .setBody(toJson(new ProductResponse(productId, "상품명", memberId))));
     }
 
     public Stock deduct(Long productId, Long orderId, Long deductQuantity, Long memberId) {
